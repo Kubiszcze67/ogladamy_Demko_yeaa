@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- shared by link only: ask search engines not to list or follow this page -->
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Demka CS 1.6</title>
+    <link rel="shortcut icon" type="image/x-icon" href="./assets/favicon-BO_SY-Vz.ico?" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow-x: hidden;
+      }
+      body {
+        display: flex;
+        flex-flow: column;
+        font-family: 'Tahoma', sans-serif;
+        color: #333;
+        background: #fff;
+      }
+      a {
+        color: #333;
+      }
+      /* one page width for the picker, player + sidebar and the stats below */
+      .picker,
+      .layout,
+      .panel {
+        width: min(1800px, calc(100% - 24px));
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .layout {
+        display: flex;
+        gap: 12px;
+        /* player and rounds fill the window below the demo picker */
+        --player-height: max(420px, calc(100vh - 62px));
+      }
+      .content {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+        height: var(--player-height);
+      }
+      .btn {
+        padding: 5px 10px;
+        border: 1px solid #bbb;
+        border-radius: 3px;
+        background: #fff;
+        font: inherit;
+        font-size: 10pt;
+        color: #333;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .btn:hover {
+        background: #f0f0f0;
+      }
+      .btn.primary {
+        background: #2a6b2a;
+        border-color: #2a6b2a;
+        color: #fff;
+      }
+      .btn.primary:hover {
+        background: #235a23;
+      }
+      .source {
+        color: #666;
+        font-size: 9pt;
+      }
+      /* first screen when the page has no files of its own: choose the Half-Life folder */
+      .start {
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #1b1b1b;
+        color: #ddd;
+        border-radius: 4px;
+      }
+      .start[hidden] {
+        display: none;
+      }
+      .start-box {
+        max-width: 560px;
+        padding: 24px;
+        text-align: center;
+        line-height: 1.5;
+      }
+      .start-box h1 {
+        margin: 0 0 12px;
+        font-size: 18pt;
+        font-weight: normal;
+        letter-spacing: 1px;
+        color: #fff;
+      }
+      .start-box code {
+        background: #333;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-size: 9pt;
+        word-break: break-all;
+      }
+      .start-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+        margin: 18px 0 10px;
+      }
+      .start-buttons .btn {
+        min-width: 260px;
+        padding: 8px 14px;
+      }
+      .start-note {
+        color: #999;
+        font-size: 9pt;
+      }
+      .start-note.error {
+        color: #ff8a7a;
+      }
+      .sidebar {
+        width: 360px;
+        height: var(--player-height);
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 10pt;
+        overflow: hidden;
+      }
+      @media (max-width: 1100px) {
+        .layout {
+          flex-direction: column;
+        }
+        .content {
+          /* in a column, flex: 1 would mean "height 0" */
+          flex: none;
+          height: max(360px, 70vh);
+        }
+        .sidebar {
+          width: auto;
+          height: 460px;
+        }
+      }
+      .sidebar-head {
+        padding: 8px;
+        border-bottom: 1px solid #ddd;
+        background: #fafafa;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .sidebar-title {
+        font-size: 11pt;
+        letter-spacing: 1px;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      .tab {
+        padding: 4px 10px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        background: #fff;
+        font: inherit;
+        font-size: 9pt;
+        color: #333;
+        cursor: pointer;
+      }
+      .tab:hover {
+        background: #f0f0f0;
+      }
+      .tab.active {
+        background: #333;
+        border-color: #333;
+        color: #fff;
+      }
+      .tab .count {
+        opacity: 0.6;
+        margin-left: 4px;
+      }
+      .sidebar-list {
+        position: relative;
+        flex: 1;
+        overflow-y: auto;
+        padding: 6px 8px 8px;
+      }
+      .sidebar-empty {
+        color: #888;
+        padding: 16px 4px;
+      }
+      #hlv-target {
+        width: 100%;
+        height: 100%;
+      }
+      .picker {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-top: 10px;
+        margin-bottom: 10px;
+      }
+      .picker select {
+        flex: 1;
+        min-width: 0;
+        padding: 6px;
+        font: inherit;
+      }
+      .picker .warn {
+        color: #b00;
+        font-size: 10pt;
+      }
+      /* body is a flex column of viewport height: keep children from being squeezed */
+      body > * {
+        flex-shrink: 0;
+      }
+      .panel {
+        margin-top: 16px;
+        margin-bottom: 40px;
+        font-size: 10pt;
+      }
+      .panel summary {
+        cursor: pointer;
+        font-size: 11pt;
+        letter-spacing: 1px;
+        padding: 6px 0;
+        color: #555;
+      }
+      .panel summary:hover {
+        color: #000;
+      }
+      .panel[open] summary {
+        margin-bottom: 8px;
+      }
+      .panel .hint {
+        color: #777;
+        font-size: 9pt;
+        margin: -4px 0 8px;
+      }
+      .stats {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      .stats th,
+      .stats td {
+        text-align: right;
+        padding: 4px 8px;
+        border-bottom: 1px solid #eee;
+      }
+      .stats th:first-child,
+      .stats td:first-child {
+        text-align: left;
+      }
+      .stats th {
+        color: #666;
+        font-weight: normal;
+        border-bottom: 1px solid #ccc;
+      }
+      .stats tr.local td {
+        background: #eaffea;
+        font-weight: bold;
+      }
+      .team-ct {
+        color: #1d64c2;
+      }
+      .team-t {
+        color: #c23a1d;
+      }
+      .rounds {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .round {
+        border: 1px solid #e3e3e3;
+        border-radius: 4px;
+      }
+      .sidebar-list .round {
+        margin-bottom: 2px;
+      }
+      .round.current {
+        border-color: #333;
+      }
+      .round-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 2px 8px;
+        font-size: 9pt;
+        line-height: 16px;
+        background: none;
+        border: none;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .round-head:hover {
+        background: #f5f5f5;
+      }
+      .round-num {
+        width: 64px;
+        font-weight: bold;
+        white-space: nowrap;
+      }
+      .badge {
+        display: inline-block;
+        min-width: 28px;
+        text-align: center;
+        padding: 0 5px;
+        border-radius: 3px;
+        color: #fff;
+        font-size: 8pt;
+        line-height: 14px;
+      }
+      .badge.ct {
+        background: #1d64c2;
+      }
+      .badge.t {
+        background: #c23a1d;
+      }
+      .badge.draw,
+      .badge.none {
+        background: #999;
+      }
+      .round-score {
+        width: 46px;
+      }
+      .round-time {
+        flex: 1;
+        color: #777;
+      }
+      .round-toggle {
+        color: #999;
+      }
+      .kills {
+        display: none;
+        padding: 2px 6px 8px 6px;
+        font-size: 9pt;
+      }
+      .round.open .kills {
+        display: block;
+      }
+      .kill {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 6px;
+        align-items: baseline;
+        width: 100%;
+        padding: 3px 4px;
+        background: none;
+        border: none;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+        border-radius: 3px;
+      }
+      .kill:hover {
+        background: #f0f0f0;
+      }
+      .kill.mine {
+        background: #eaffea;
+      }
+      .kill .when {
+        width: 36px;
+        color: #888;
+      }
+      .kill .weapon {
+        color: #555;
+      }
+      .kill .hs {
+        font-size: 8pt;
+        font-weight: bold;
+        color: #fff;
+        background: #333;
+        padding: 0 4px;
+        border-radius: 2px;
+      }
+      .kill .tk {
+        font-size: 8pt;
+        color: #c23a1d;
+      }
+      .match-sep {
+        margin: 10px 0 4px;
+        color: #888;
+        font-size: 9pt;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .match-sep:first-child {
+        margin-top: 2px;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-CuZ1DI4m.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-ChB00rx4.css">
+  </head>
+  <body>
+    <div class="picker">
+      <label for="demo-select">Demko:</label>
+      <select id="demo-select">
+        <option>Wczytywanie listy…</option>
+      </select>
+      <button type="button" class="btn" id="btn-open-demo">Otwórz demko…</button>
+      <button type="button" class="btn" id="btn-folder">Folder gry…</button>
+      <span class="source" id="source-info"></span>
+      <span class="warn" id="demo-warn"></span>
+      <input type="file" id="demo-file" accept=".dem" multiple hidden />
+      <input type="file" id="folder-input" webkitdirectory hidden />
+    </div>
+
+    <div class="layout">
+      <div class="content">
+        <div id="hlv-target"></div>
+
+        <div class="start" id="start" hidden>
+          <div class="start-box">
+            <h1>Odtwarzacz demek CS 1.6</h1>
+            <p>
+              Wskaż swój folder <b>Half-Life</b>, np.
+              <code>C:\Program Files (x86)\Steam\steamapps\common\Half-Life</code>.
+              Mapy, modele, dźwięki, niebo i demka zostaną odczytane z Twojego dysku – nic nie jest wysyłane do
+              internetu.
+            </p>
+            <div class="start-buttons">
+              <button type="button" class="btn primary" id="start-saved" hidden>
+                Użyj zapisanego folderu: <span id="start-saved-name"></span>
+              </button>
+              <button type="button" class="btn primary" id="start-folder">Wybierz folder Half-Life</button>
+              <button type="button" class="btn" id="start-demo">Otwórz plik demka (.dem)</button>
+            </div>
+            <p class="start-note" id="start-note">
+              Demka z folderu <code>cstrike</code> pojawią się na liście u góry. Działa w Chrome, Edge i Operze.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-head">
+          <div class="sidebar-title">Rundy</div>
+          <div class="tabs" id="map-tabs"></div>
+          <div class="tabs" id="kind-tabs"></div>
+        </div>
+        <div class="sidebar-list" id="rounds">
+          <div class="sidebar-empty">Rundy pojawią się po wczytaniu demka.</div>
+        </div>
+      </aside>
+    </div>
+
+    <details class="panel" id="panel" hidden>
+      <summary>Statystyki graczy</summary>
+      <p class="hint">
+        Bez rozgrzewki. Zielony wiersz to gracz, który nagrał demko. Kolor nicku = drużyna z końca demka.
+        Kliknij rundę po prawej, żeby do niej przeskoczyć, a zabójstwo, żeby obejrzeć je od 5 sekund przed.
+      </p>
+      <table class="stats">
+        <thead>
+          <tr>
+            <th>Gracz</th>
+            <th>Zabójstwa</th>
+            <th>Zgony</th>
+            <th>HS</th>
+            <th>HS %</th>
+            <th>K/D</th>
+          </tr>
+        </thead>
+        <tbody id="stats-body"></tbody>
+      </table>
+    </details>
+
+    <script>
+      // Two ways to get files:
+      //  - "server": the dev server lists res/replays (replays.json) and serves res/ (local setup)
+      //  - "folder": the user picks their Half-Life folder and everything is read from their disk
+      //    (this is what a shared copy of the page without res/ uses)
+      var viewer = null
+      var mode = 'none'
+      var serverDemos = [] // [{ name, map, hasMap }] from replays.json
+      var currentDemo = null
+
+      function $(id) {
+        return document.getElementById(id)
+      }
+
+      document.addEventListener('DOMContentLoaded', function () {
+        viewer = HLViewer.init('#hlv-target', 'res')
+        viewer.onReplayLoad(function (info) {
+          if (info) renderPanel(viewer, info)
+        })
+        viewer.onLoadError(function (kind, name) {
+          // only the files that stop a demo from playing are worth a message (missing sounds, sprites... are fine)
+          if (kind === 'replay') $('demo-warn').textContent = 'Nie udało się wczytać demka ' + decodeURIComponent(name)
+          if (kind === 'bsp') $('demo-warn').textContent = 'Brak mapy ' + name + ' (folder cstrike/maps)'
+        })
+
+        $('demo-select').addEventListener('change', function () {
+          if (this.value) openDemo(this.value)
+        })
+        $('btn-open-demo').addEventListener('click', function () {
+          $('demo-file').click()
+        })
+        $('start-demo').addEventListener('click', function () {
+          $('demo-file').click()
+        })
+        $('demo-file').addEventListener('change', onDemoFiles)
+        $('btn-folder').addEventListener('click', chooseFolder)
+        $('start-folder').addEventListener('click', chooseFolder)
+        $('folder-input').addEventListener('change', function () {
+          if (this.files && this.files.length) onFolderReady(HLViewer.files.useFileList(this.files))
+        })
+        $('start-saved').addEventListener('click', function () {
+          HLViewer.files
+            .useSavedFolder(true)
+            .then(function (folder) {
+              if (folder) onFolderReady(folder)
+              else startNote('Brak dostępu do zapisanego folderu – wybierz go ponownie.', true)
+            })
+            .catch(function (e) {
+              startNote(String((e && e.message) || e), true)
+            })
+        })
+
+        start()
+      })
+
+      function start() {
+        fetch('replays.json')
+          .then(function (r) {
+            return r.ok ? r.json() : null
+          })
+          .catch(function () {
+            return null
+          })
+          .then(function (list) {
+            if (Array.isArray(list) && list.length) {
+              // local setup with res/: play demos from the server as before
+              mode = 'server'
+              serverDemos = list
+              $('source-info').textContent = 'Pliki: res/'
+              fillDemoList()
+              var wanted = new URLSearchParams(location.search).get('demo')
+              var first =
+                (wanted && list.some(function (d) { return d.name === wanted }) && wanted) ||
+                (list.some(function (d) { return d.name === 'kz_ea_highblock.dem' }) && 'kz_ea_highblock.dem') ||
+                list[0].name
+              openDemo(first)
+              return
+            }
+
+            // no files of our own: use the visitor's Half-Life folder
+            mode = 'folder'
+            fillDemoList()
+            HLViewer.files.useSavedFolder(false).then(function (folder) {
+              if (folder) {
+                onFolderReady(folder)
+              } else {
+                showStart()
+              }
+            })
+          })
+      }
+
+      function showStart() {
+        $('start').hidden = false
+        HLViewer.files.savedFolderName().then(function (name) {
+          $('start-saved').hidden = !name
+          $('start-saved-name').textContent = name || ''
+        })
+      }
+
+      function startNote(text, isError) {
+        var n = $('start-note')
+        n.textContent = text
+        n.classList.toggle('error', !!isError)
+      }
+
+      function chooseFolder() {
+        if (!HLViewer.files.canPickFolder()) {
+          // Firefox & co.: fall back to selecting the whole folder through a file input
+          $('folder-input').click()
+          return
+        }
+        HLViewer.files
+          .pickFolder()
+          .then(onFolderReady)
+          .catch(function (e) {
+            if (e && e.name === 'AbortError') return // dialog closed
+            var msg = String((e && e.message) || e)
+            if ($('start').hidden) $('demo-warn').textContent = msg
+            else startNote(msg, true)
+          })
+      }
+
+      function onFolderReady(folder) {
+        mode = 'folder'
+        $('source-info').textContent = 'Folder gry: ' + folder.name
+        $('demo-warn').textContent = folder.warning || ''
+        return refreshFolderDemos().then(function (names) {
+          var wanted = new URLSearchParams(location.search).get('demo')
+          if (currentDemo && names.indexOf(currentDemo) >= 0) {
+            openDemo(currentDemo) // reload the open demo with the folder's files
+          } else if (wanted && names.indexOf(wanted) >= 0) {
+            openDemo(wanted)
+          } else if (!currentDemo) {
+            $('start').hidden = false
+            startNote(
+              names.length
+                ? 'Folder gotowy. Wybierz demko z listy u góry (' + names.length + ' w folderze cstrike).'
+                : 'Folder gotowy, ale w folderze cstrike nie ma demek. Użyj „Otwórz plik demka”.',
+              false
+            )
+            $('start-saved').hidden = true
+            $('start-folder').textContent = 'Wybierz inny folder'
+          }
+        })
+      }
+
+      var folderDemos = []
+      function refreshFolderDemos() {
+        var folder = HLViewer.files.folder()
+        var p = folder ? folder.listDemos() : Promise.resolve([])
+        return p.then(function (names) {
+          folderDemos = names
+          fillDemoList()
+          return names
+        })
+      }
+
+      function onDemoFiles() {
+        var files = Array.prototype.slice.call(this.files || [])
+        if (!files.length) return
+        files.forEach(function (f) {
+          HLViewer.files.addDemo(f)
+        })
+        fillDemoList()
+        openDemo(files[0].name)
+        this.value = ''
+      }
+
+      // demo list: opened files first, then the folder's (or the server's) demos
+      function fillDemoList() {
+        var select = $('demo-select')
+        select.innerHTML = ''
+        var placeholder = document.createElement('option')
+        placeholder.value = ''
+        placeholder.textContent = '— wybierz demko —'
+        select.appendChild(placeholder)
+
+        function group(label, items) {
+          if (!items.length) return
+          var g = document.createElement('optgroup')
+          g.label = label
+          items.forEach(function (it) {
+            var opt = document.createElement('option')
+            opt.value = it.name
+            opt.textContent = it.label
+            g.appendChild(opt)
+          })
+          select.appendChild(g)
+        }
+
+        var opened = HLViewer.files.openedDemos()
+        group('Otwarte pliki', opened.map(function (n) { return { name: n, label: n } }))
+        if (mode === 'server') {
+          group(
+            'res/replays',
+            serverDemos.map(function (d) {
+              return { name: d.name, label: d.name + '  —  ' + (d.map || '?') + (d.hasMap ? '' : '  (brak mapy)') }
+            })
+          )
+        } else {
+          group('Folder cstrike', folderDemos.map(function (n) { return { name: n, label: n } }))
+        }
+        select.value = currentDemo || ''
+      }
+
+      // loads a demo into the same viewer (no page reload, so a chosen folder stays usable)
+      function openDemo(name) {
+        currentDemo = name
+        $('start').hidden = true
+        $('demo-select').value = name
+        $('demo-warn').textContent = (HLViewer.files.folder() && HLViewer.files.folder().warning) || ''
+        if (mode === 'server') {
+          var info = serverDemos.find(function (d) { return d.name === name })
+          if (info && !info.hasMap) $('demo-warn').textContent = 'Brak mapy ' + info.map + '.bsp w res/maps'
+        }
+        // encode so names with #, [ ] or @ survive being put into the request URL
+        viewer.open(encodeURIComponent(name))
+        viewer.setTitle(name)
+        try {
+          history.replaceState(null, '', '?demo=' + encodeURIComponent(name))
+        } catch (e) {}
+      }
+
+      // ---- rounds & stats panel (nicknames are untrusted text: only ever set via textContent) ----
+
+      var CT_MODELS = ['urban', 'gsg9', 'sas', 'gign', 'spetsnaz', 'vip']
+      var T_MODELS = ['terror', 'leet', 'arctic', 'guerilla', 'militia']
+      function teamOf(model) {
+        if (CT_MODELS.indexOf(model) >= 0) return 'ct'
+        if (T_MODELS.indexOf(model) >= 0) return 't'
+        return ''
+      }
+
+      function fmt(t) {
+        var s = Math.max(0, Math.floor(t))
+        var m = Math.floor(s / 60)
+        s = s % 60
+        return m + ':' + (s < 10 ? '0' : '') + s
+      }
+
+      function el(tag, cls, text) {
+        var e = document.createElement(tag)
+        if (cls) e.className = cls
+        if (text !== undefined) e.textContent = text
+        return e
+      }
+
+      // a half is played until one team has 10 round wins; anything shorter (restarts, knife/warm-up
+      // rounds before the real game) goes to the "Rozgrzewka" tab
+      var WIN_ROUNDS = 10
+
+      function splitHalves(rounds) {
+        var halves = []
+        var cur = null
+        rounds.forEach(function (r, i) {
+          var prev = rounds[i - 1]
+          if (!prev || r.mapIndex !== prev.mapIndex || r.number < prev.number) {
+            cur = { mapIndex: r.mapIndex, mapName: r.mapName, rounds: [] }
+            halves.push(cur)
+          }
+          cur.rounds.push(r)
+        })
+        halves.forEach(function (h) {
+          var last = h.rounds[h.rounds.length - 1]
+          h.final = last.scoreAfter
+          h.warmup = Math.max(last.scoreAfter.ct, last.scoreAfter.t) < WIN_ROUNDS
+          h.rounds.forEach(function (r) {
+            r.warmup = h.warmup
+          })
+        })
+        return halves
+      }
+
+      function renderPanel(viewer, info) {
+        var halves = splitHalves(info.rounds)
+        document.getElementById('panel').hidden = false
+        renderStats(info)
+        renderRounds(viewer, info, halves)
+      }
+
+      function renderStats(info) {
+        var stats = {}
+        function row(index, name, model) {
+          if (!stats[index]) stats[index] = { index: index, name: name, model: model, k: 0, d: 0, hs: 0 }
+          return stats[index]
+        }
+        info.rounds.forEach(function (r) {
+          if (r.warmup) return
+          r.kills.forEach(function (k) {
+            var v = row(k.victim, k.victimName, k.victimModel)
+            v.d++
+            if (k.killer > 0 && k.killer !== k.victim) {
+              var a = row(k.killer, k.killerName, k.killerModel)
+              a.k++
+              if (k.headshot) a.hs++
+            }
+          })
+        })
+
+        var rows = Object.keys(stats).map(function (key) {
+          var s = stats[key]
+          // prefer the latest name/team the replay knows
+          var latest = info.playerInfo[s.index]
+          if (latest) {
+            s.name = latest.name
+            s.model = latest.model
+          }
+          return s
+        })
+        rows.sort(function (a, b) {
+          return b.k - a.k || a.d - b.d
+        })
+
+        var body = document.getElementById('stats-body')
+        body.innerHTML = ''
+        rows.forEach(function (s) {
+          var tr = el('tr', s.index === info.localPlayer ? 'local' : '')
+          var name = el('td', 'team-' + teamOf(s.model), (s.index === info.localPlayer ? '★ ' : '') + s.name)
+          tr.appendChild(name)
+          tr.appendChild(el('td', '', String(s.k)))
+          tr.appendChild(el('td', '', String(s.d)))
+          tr.appendChild(el('td', '', String(s.hs)))
+          tr.appendChild(el('td', '', s.k ? Math.round((s.hs / s.k) * 100) + '%' : '–'))
+          tr.appendChild(el('td', '', s.d ? (s.k / s.d).toFixed(2) : String(s.k)))
+          body.appendChild(tr)
+        })
+      }
+
+      function renderRounds(viewer, info, halves) {
+        var list = document.getElementById('rounds')
+        var mapTabs = document.getElementById('map-tabs')
+        var kindTabs = document.getElementById('kind-tabs')
+
+        // maps in replay order
+        var maps = []
+        halves.forEach(function (h) {
+          if (!maps.some(function (m) { return m.index === h.mapIndex })) maps.push({ index: h.mapIndex, name: h.mapName })
+        })
+        function roundsOf(mapIndex, warmup) {
+          var n = 0
+          halves.forEach(function (h) {
+            if (h.mapIndex === mapIndex && h.warmup === warmup) n += h.rounds.length
+          })
+          return n
+        }
+
+        var firstReal = halves.find(function (h) { return !h.warmup }) || halves[0]
+        var selected = { map: firstReal ? firstReal.mapIndex : 0, warmup: firstReal ? firstReal.warmup : false }
+        var rows = []
+
+        function tab(container, label, count, active, onClick) {
+          var b = el('button', 'tab' + (active ? ' active' : ''), label)
+          b.type = 'button'
+          if (count !== undefined) b.appendChild(el('span', 'count', String(count)))
+          b.addEventListener('click', onClick)
+          container.appendChild(b)
+        }
+
+        function renderTabs() {
+          mapTabs.innerHTML = ''
+          kindTabs.innerHTML = ''
+          if (maps.length > 1) {
+            maps.forEach(function (m) {
+              tab(mapTabs, m.name, undefined, m.index === selected.map, function () {
+                selected.map = m.index
+                selected.warmup = roundsOf(m.index, false) === 0
+                render()
+              })
+            })
+          }
+          tab(kindTabs, 'Mecz', roundsOf(selected.map, false), !selected.warmup, function () {
+            selected.warmup = false
+            render()
+          })
+          if (roundsOf(selected.map, true) > 0) {
+            tab(kindTabs, 'Rozgrzewka', roundsOf(selected.map, true), selected.warmup, function () {
+              selected.warmup = true
+              render()
+            })
+          }
+        }
+
+        function render() {
+          renderTabs()
+          list.innerHTML = ''
+          rows = []
+          var halfNo = 0
+          halves.forEach(function (h) {
+            if (h.mapIndex !== selected.map) return
+            if (!h.warmup) halfNo++
+            if (h.warmup !== selected.warmup) return
+
+            var title = h.warmup
+              ? 'Rozgrzewka / restart · ' + h.final.ct + ' : ' + h.final.t
+              : 'Połowa ' + halfNo + ' · wynik ' + h.final.ct + ' : ' + h.final.t
+            list.appendChild(el('div', 'match-sep', title + ' · od ' + fmt(h.rounds[0].startTime)))
+            h.rounds.forEach(function (r) {
+              renderRound(r)
+            })
+          })
+          if (!rows.length) {
+            list.appendChild(el('div', 'sidebar-empty', 'Brak rund w tej zakładce.'))
+          }
+        }
+
+        function renderRound(r) {
+          var box = el('div', 'round')
+          var head = el('button', 'round-head')
+          head.type = 'button'
+          head.appendChild(el('span', 'round-num', 'Runda ' + r.number))
+
+          var winnerText = r.winner === 'ct' ? 'CT' : r.winner === 't' ? 'TT' : r.winner === 'draw' ? 'remis' : 'przerwana'
+          head.appendChild(el('span', 'badge ' + (r.winner || 'none'), winnerText))
+          head.appendChild(el('span', 'round-score', r.scoreAfter.ct + ' : ' + r.scoreAfter.t))
+          head.appendChild(el('span', 'round-time', fmt(r.startTime)))
+
+          head.appendChild(el('span', 'round-toggle', '▾'))
+
+          var kills = el('div', 'kills')
+          r.kills.forEach(function (k) {
+            var b = el('button', 'kill' + (k.killer === info.localPlayer ? ' mine' : ''))
+            b.type = 'button'
+            b.appendChild(el('span', 'when', '+' + fmt(k.time - r.startTime)))
+            b.appendChild(el('span', 'team-' + teamOf(k.killerModel), k.killerName))
+            b.appendChild(el('span', 'weapon', '[' + k.weapon + ']'))
+            if (k.headshot) b.appendChild(el('span', 'hs', 'HS'))
+            b.appendChild(el('span', 'team-' + teamOf(k.victimModel), k.victimName))
+            var kt = teamOf(k.killerModel)
+            if (kt && kt === teamOf(k.victimModel) && k.killer !== k.victim) b.appendChild(el('span', 'tk', 'TK'))
+            b.addEventListener('click', function () {
+              viewer.seek(Math.max(r.startTime, k.time - 5))
+            })
+            kills.appendChild(b)
+          })
+
+          head.addEventListener('click', function () {
+            var open = box.classList.toggle('open')
+            if (open) viewer.seek(r.startTime)
+          })
+
+          box.appendChild(head)
+          box.appendChild(kills)
+          list.appendChild(box)
+          rows.push({ round: r, box: box })
+        }
+
+        render()
+
+        // highlight the round that is playing; when playback moves to another map (or between
+        // match and warm-up), follow it with the tabs
+        var lastCurrent = null
+        // one timer per page: a newly opened demo replaces the previous demo's
+        if (window.__roundTimer) clearInterval(window.__roundTimer)
+        window.__roundTimer = setInterval(function () {
+          var t = viewer.getCurrentTime()
+          var current = null
+          info.rounds.forEach(function (r) {
+            if (r.startTime <= t + 0.01) current = r
+          })
+          if (current && current !== lastCurrent) {
+            var changedPlace = !lastCurrent || current.mapIndex !== lastCurrent.mapIndex || current.warmup !== lastCurrent.warmup
+            lastCurrent = current
+            if (changedPlace && (current.mapIndex !== selected.map || current.warmup !== selected.warmup)) {
+              selected.map = current.mapIndex
+              selected.warmup = current.warmup
+              render()
+            }
+            // keep the playing round visible inside the sidebar (without scrolling the page)
+            var row = rows.find(function (x) { return x.round === current })
+            if (row) {
+              var top = row.box.offsetTop
+              if (top < list.scrollTop || top + row.box.offsetHeight > list.scrollTop + list.clientHeight) {
+                list.scrollTop = top - 40
+              }
+            }
+          }
+          rows.forEach(function (row) {
+            row.box.classList.toggle('current', row.round === current)
+          })
+        }, 500)
+      }
+    </script>
+  </body>
+</html>
