@@ -404,8 +404,113 @@
       .match-sep:first-child {
         margin-top: 2px;
       }
+      .view-tabs {
+        display: flex;
+        border-bottom: 1px solid #ddd;
+        margin: -8px -8px 0;
+      }
+      .view-tab {
+        flex: 1;
+        padding: 8px 6px;
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        font: inherit;
+        font-size: 10pt;
+        letter-spacing: 0.5px;
+        color: #777;
+        cursor: pointer;
+      }
+      .view-tab:hover {
+        color: #000;
+      }
+      .view-tab.active {
+        color: #000;
+        border-bottom-color: #333;
+      }
+      .view-tab .count {
+        opacity: 0.6;
+        margin-left: 5px;
+        font-size: 9pt;
+      }
+      .head-part {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .head-part[hidden] {
+        display: none;
+      }
+      .deaths-options {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        font-size: 9pt;
+        color: #555;
+      }
+      .deaths-options #deaths-stop {
+        margin-left: auto;
+      }
+      .deaths-options label {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+      }
+      .death {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 6px;
+        align-items: baseline;
+        width: 100%;
+        padding: 4px 6px;
+        margin-bottom: 2px;
+        background: none;
+        border: 1px solid #e3e3e3;
+        border-radius: 4px;
+        font: inherit;
+        font-size: 9pt;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .death:hover {
+        background: #f5f5f5;
+      }
+      .death.current {
+        border-color: #333;
+        background: #fff6e0;
+      }
+      .death .round-no {
+        width: 58px;
+        font-weight: bold;
+        white-space: nowrap;
+      }
+      .death .when {
+        width: 36px;
+        color: #888;
+      }
+      .death .weapon {
+        color: #555;
+      }
+      .death .hs {
+        font-size: 8pt;
+        font-weight: bold;
+        color: #fff;
+        background: #333;
+        padding: 0 4px;
+        border-radius: 2px;
+      }
+      .death .play {
+        margin-left: auto;
+        color: #999;
+      }
+      .death.no-pov .play {
+        font-size: 8pt;
+      }
     </style>
-    <script type="module" crossorigin src="./assets/index-CCvUZ1S0.js"></script>
+    <script type="module" crossorigin src="./assets/index-97n83ocz.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-ChB00rx4.css">
   </head>
   <body>
@@ -451,12 +556,30 @@
 
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-head">
-          <div class="sidebar-title">Rundy</div>
-          <div class="tabs" id="map-tabs"></div>
-          <div class="tabs" id="kind-tabs"></div>
+          <div class="view-tabs">
+            <button type="button" class="view-tab active" id="view-rounds">Rundy</button>
+            <button type="button" class="view-tab" id="view-deaths">Kto mnie zabił<span class="count" id="deaths-count"></span></button>
+          </div>
+          <div id="rounds-head" class="head-part">
+            <div class="tabs" id="map-tabs"></div>
+            <div class="tabs" id="kind-tabs"></div>
+          </div>
+          <div id="deaths-head" class="head-part" hidden>
+            <div class="tabs" id="killer-tabs"></div>
+            <div class="deaths-options">
+              <label title="Najpierw ok. 5 s z Twoich oczu, potem to samo oczami zabójcy"
+                ><input type="checkbox" id="deaths-own" checked /> najpierw mój widok</label
+              >
+              <label><input type="checkbox" id="deaths-auto" checked /> potem następny zgon</label>
+              <button type="button" class="tab" id="deaths-stop" hidden>Wróć do widoku nagrywającego</button>
+            </div>
+          </div>
         </div>
         <div class="sidebar-list" id="rounds">
           <div class="sidebar-empty">Rundy pojawią się po wczytaniu demka.</div>
+        </div>
+        <div class="sidebar-list" id="deaths" hidden>
+          <div class="sidebar-empty">Zgony pojawią się po wczytaniu demka.</div>
         </div>
       </aside>
     </div>
@@ -500,6 +623,17 @@
         viewer = HLViewer.init('#hlv-target', 'res')
         viewer.onReplayLoad(function (info) {
           if (info) renderPanel(viewer, info)
+        })
+        viewer.onDeathPovChange(markCurrentDeath)
+        viewer.onDeathPovEnd(onDeathClipEnd)
+        $('view-rounds').addEventListener('click', function () {
+          showSidebarView('rounds')
+        })
+        $('view-deaths').addEventListener('click', function () {
+          showSidebarView('deaths')
+        })
+        $('deaths-stop').addEventListener('click', function () {
+          viewer.stopDeathPov()
         })
         viewer.onLoadError(function (kind, name) {
           // only the files that stop a demo from playing are worth a message (missing sounds, sprites... are fine)
@@ -761,6 +895,160 @@
         document.getElementById('panel').hidden = false
         renderStats(info)
         renderRounds(viewer, info, halves)
+        renderDeaths(info)
+      }
+
+      // ---- "Kto mnie zabił": deaths of the recorder, replayed through the killer's eyes ----
+
+      var deaths = { list: [], filter: null, rows: [] }
+
+      function showSidebarView(name) {
+        var d = name === 'deaths'
+        $('view-rounds').classList.toggle('active', !d)
+        $('view-deaths').classList.toggle('active', d)
+        $('rounds-head').hidden = d
+        $('rounds').hidden = d
+        $('deaths-head').hidden = !d
+        $('deaths').hidden = !d
+        if (d) markCurrentDeath()
+      }
+
+      // a death with someone to follow (not the world, a fall or a suicide)
+      function hasKiller(k) {
+        return k.killer > 0 && k.killer !== k.victim
+      }
+
+      function renderDeaths(info) {
+        var all = []
+        info.rounds.forEach(function (r) {
+          r.kills.forEach(function (k) {
+            var mine = k.recorderDied !== undefined ? k.recorderDied : k.victim === info.localPlayer
+            if (mine) all.push({ kill: k, round: r })
+          })
+        })
+        deaths.list = all
+        deaths.filter = null
+        $('deaths-count').textContent = all.length ? String(all.length) : ''
+        renderDeathList()
+      }
+
+      function filteredDeaths() {
+        return deaths.list.filter(function (d) {
+          return deaths.filter === null || (hasKiller(d.kill) && d.kill.killerName === deaths.filter)
+        })
+      }
+
+      function renderDeathList() {
+        var tabs = $('killer-tabs')
+        var list = $('deaths')
+        tabs.innerHTML = ''
+        list.innerHTML = ''
+        deaths.rows = []
+
+        // killers by how often they got the recorder
+        var killers = []
+        deaths.list.forEach(function (d) {
+          if (!hasKiller(d.kill)) return
+          var k = killers.find(function (x) { return x.name === d.kill.killerName })
+          if (!k) killers.push((k = { name: d.kill.killerName, model: d.kill.killerModel, n: 0 }))
+          k.n++
+        })
+        killers.sort(function (a, b) { return b.n - a.n || a.name.localeCompare(b.name) })
+
+        function tab(label, count, value, cls) {
+          var b = el('button', 'tab' + (deaths.filter === value ? ' active' : '') + (cls ? ' ' + cls : ''), label)
+          b.type = 'button'
+          b.appendChild(el('span', 'count', String(count)))
+          b.addEventListener('click', function () {
+            deaths.filter = value
+            renderDeathList()
+          })
+          tabs.appendChild(b)
+        }
+        tab('Wszyscy', deaths.list.length, null)
+        killers.forEach(function (k) {
+          tab(k.name, k.n, k.name, deaths.filter === k.name ? '' : 'team-' + teamOf(k.model))
+        })
+
+        if (!deaths.list.length) {
+          list.appendChild(el('div', 'sidebar-empty', 'Nagrywający ani razu nie zginął w tym demku.'))
+          return
+        }
+
+        var lastPlace = null
+        filteredDeaths().forEach(function (d) {
+          var k = d.kill
+          var r = d.round
+          var place = r.mapIndex + ':' + (r.warmup ? 'w' : 'm')
+          if (place !== lastPlace) {
+            lastPlace = place
+            list.appendChild(el('div', 'match-sep', r.mapName + ' · ' + (r.warmup ? 'rozgrzewka / restart' : 'mecz')))
+          }
+          var pov = hasKiller(k)
+          var b = el('button', 'death' + (pov ? '' : ' no-pov'))
+          b.type = 'button'
+          b.appendChild(el('span', 'round-no', 'Runda ' + r.number))
+          b.appendChild(el('span', 'when', '+' + fmt(k.time - r.startTime)))
+          b.appendChild(
+            el('span', 'team-' + teamOf(k.killerModel), pov ? k.killerName : k.killer === k.victim ? 'samobójstwo' : 'świat')
+          )
+          b.appendChild(el('span', 'weapon', '[' + k.weapon + ']'))
+          if (k.headshot) b.appendChild(el('span', 'hs', 'HS'))
+          b.appendChild(el('span', 'play', pov ? '▶ POV' : '▶ widok'))
+          b.title = pov
+            ? 'Twój widok zgonu, a potem ~5 s przed nim oczami zabójcy'
+            : 'Nie ma zabójcy do śledzenia: zwykły widok od 5 s przed zgonem'
+          b.addEventListener('click', function () {
+            playDeath(d)
+          })
+          list.appendChild(b)
+          deaths.rows.push({ death: d, el: b })
+        })
+        markCurrentDeath()
+      }
+
+      function playDeath(d) {
+        var k = d.kill
+        if (hasKiller(k)) {
+          var ownFrom = $('deaths-own').checked ? Math.max(d.round.startTime, k.time - 5) : undefined
+          viewer.watchDeath(k, Math.max(d.round.startTime, k.time - 5), ownFrom)
+        } else {
+          viewer.stopDeathPov()
+          viewer.seek(Math.max(d.round.startTime, k.time - 5))
+        }
+      }
+
+      function markCurrentDeath() {
+        var cur = viewer && viewer.currentDeathPov()
+        $('deaths-stop').hidden = !cur
+        var list = $('deaths')
+        deaths.rows.forEach(function (row) {
+          var on = row.death.kill === cur
+          row.el.classList.toggle('current', on)
+          if (on && !list.hidden) {
+            var top = row.el.offsetTop
+            if (top < list.scrollTop || top + row.el.offsetHeight > list.scrollTop + list.clientHeight) {
+              list.scrollTop = top - 40
+            }
+          }
+        })
+      }
+
+      // after a clip: the next death of the (filtered) list, if wanted
+      function onDeathClipEnd(kill) {
+        if (!$('deaths-auto').checked) return
+        var shown = filteredDeaths().filter(function (d) {
+          return hasKiller(d.kill)
+        })
+        var i = shown.findIndex(function (d) {
+          return d.kill === kill
+        })
+        var next = i >= 0 ? shown[i + 1] : null
+        if (!next) return
+        setTimeout(function () {
+          // only if the user did not leave the clip meanwhile
+          if (viewer.currentDeathPov() === kill) playDeath(next)
+        }, 800)
       }
 
       function renderStats(info) {
