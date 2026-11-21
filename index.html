@@ -502,6 +502,68 @@
         padding: 0 4px;
         border-radius: 2px;
       }
+      .view-tab {
+        white-space: nowrap;
+      }
+      .watch-hint {
+        color: #777;
+      }
+      .watch-player {
+        border: 1px solid #e3e3e3;
+        border-radius: 4px;
+        margin-bottom: 2px;
+      }
+      .watch-player.current {
+        border-color: #333;
+      }
+      .watch-head-row,
+      .watch-round {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        width: 100%;
+        padding: 4px 6px;
+        background: none;
+        border: none;
+        font: inherit;
+        font-size: 9pt;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .watch-head-row:hover,
+      .watch-round:hover {
+        background: #f5f5f5;
+      }
+      .watch-name {
+        flex: 1;
+        font-weight: bold;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .watch-time {
+        color: #888;
+        margin-left: auto;
+      }
+      .watch-head-row .play {
+        color: #999;
+      }
+      .watch-rounds {
+        padding: 0 4px 6px 12px;
+      }
+      .watch-round .round-no {
+        width: 58px;
+        font-weight: bold;
+      }
+      .watch-round .when {
+        width: 40px;
+        color: #888;
+      }
+      .watch-round.current {
+        background: #fff6e0;
+        border-radius: 3px;
+      }
       .death .play {
         margin-left: auto;
         color: #999;
@@ -510,7 +572,7 @@
         font-size: 8pt;
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-CuWYrRt9.js"></script>
+    <script type="module" crossorigin src="./assets/index-BqS6uwae.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-ChB00rx4.css">
   </head>
   <body>
@@ -559,6 +621,7 @@
           <div class="view-tabs">
             <button type="button" class="view-tab active" id="view-rounds">Rundy</button>
             <button type="button" class="view-tab" id="view-deaths">Kto mnie zabił<span class="count" id="deaths-count"></span></button>
+            <button type="button" class="view-tab" id="view-watch">Watch only</button>
           </div>
           <div id="rounds-head" class="head-part">
             <div class="tabs" id="map-tabs"></div>
@@ -574,9 +637,18 @@
               <button type="button" class="tab" id="deaths-stop" hidden>Wróć do widoku nagrywającego</button>
             </div>
           </div>
+          <div id="watch-head" class="head-part" hidden>
+            <div class="deaths-options">
+              <span class="watch-hint">Wybierz gracza: cała gra jego oczami, bez momentów, których demko nie ma.</span>
+              <button type="button" class="tab" id="watch-stop" hidden>Wróć do widoku nagrywającego</button>
+            </div>
+          </div>
         </div>
         <div class="sidebar-list" id="rounds">
           <div class="sidebar-empty">Rundy pojawią się po wczytaniu demka.</div>
+        </div>
+        <div class="sidebar-list" id="watch" hidden>
+          <div class="sidebar-empty">Gracze pojawią się po wczytaniu demka.</div>
         </div>
         <div class="sidebar-list" id="deaths" hidden>
           <div class="sidebar-empty">Zgony pojawią się po wczytaniu demka.</div>
@@ -635,6 +707,14 @@
         $('deaths-stop').addEventListener('click', function () {
           viewer.stopDeathPov()
         })
+        $('view-watch').addEventListener('click', function () {
+          showSidebarView('watch')
+        })
+        $('watch-stop').addEventListener('click', function () {
+          viewer.stopWatch()
+        })
+        viewer.onWatchChange(markWatch)
+        setInterval(markWatch, 700)
         viewer.onLoadError(function (kind, name) {
           // only the files that stop a demo from playing are worth a message (missing sounds, sprites... are fine)
           if (kind === 'replay') $('demo-warn').textContent = 'Nie udało się wczytać demka ' + decodeURIComponent(name)
@@ -896,6 +976,107 @@
         renderStats(info)
         renderRounds(viewer, info, halves)
         renderDeaths(info)
+        renderWatch(info)
+      }
+
+      // ---- "Watch only": one player's eyes through the whole demo (gaps without data are skipped) ----
+
+      var watchUi = { info: null, open: null, rows: [] }
+
+      function renderWatch(info) {
+        watchUi.info = info
+        watchUi.open = null
+        renderWatchList()
+      }
+
+      // rounds in which the player has data, with how many seconds
+      function watchRounds(pl, rounds) {
+        var out = []
+        rounds.forEach(function (r, i) {
+          var next = rounds[i + 1]
+          var from = r.startTime
+          var to = next && next.mapIndex === r.mapIndex ? next.startTime : Infinity
+          var secs = 0
+          var first = null
+          pl.segments.forEach(function (s) {
+            if (s.mapIndex !== r.mapIndex) return
+            var a = Math.max(s.start, from)
+            var b = Math.min(s.end, to)
+            if (b > a) {
+              secs += b - a
+              if (first === null) first = a
+            }
+          })
+          if (secs >= 1) out.push({ round: r, secs: secs, from: first })
+        })
+        return out
+      }
+
+      function renderWatchList() {
+        var list = $('watch')
+        var info = watchUi.info
+        list.innerHTML = ''
+        watchUi.rows = []
+        var players = (info && info.presence) || []
+        if (!players.length) {
+          list.appendChild(el('div', 'sidebar-empty', 'W tym demku nie ma danych o innych graczach.'))
+          return
+        }
+
+        players.forEach(function (pl) {
+          var box = el('div', 'watch-player' + (watchUi.open === pl.name ? ' open' : ''))
+          var head = el('button', 'watch-head-row')
+          head.type = 'button'
+          head.appendChild(el('span', 'watch-name team-' + teamOf(pl.model), pl.name))
+          head.appendChild(el('span', 'watch-time', fmt(pl.total) + ' danych'))
+          head.appendChild(el('span', 'play', '▶ POV'))
+          head.title = 'Cała gra oczami tego gracza (momenty bez danych są pomijane)'
+          head.addEventListener('click', function () {
+            watchUi.open = pl.name
+            viewer.watchPlayer(pl.name)
+            renderWatchList()
+          })
+          box.appendChild(head)
+
+          if (watchUi.open === pl.name) {
+            var rounds = el('div', 'watch-rounds')
+            watchRounds(pl, info.rounds).forEach(function (wr) {
+              var r = wr.round
+              var b = el('button', 'watch-round')
+              b.type = 'button'
+              b.appendChild(el('span', 'round-no', 'Runda ' + r.number))
+              b.appendChild(el('span', 'when', fmt(r.startTime)))
+              if (r.warmup) b.appendChild(el('span', 'weapon', 'rozgrzewka'))
+              b.appendChild(el('span', 'watch-time', fmt(wr.secs) + ' danych'))
+              b.addEventListener('click', function () {
+                viewer.watchPlayer(pl.name, wr.from)
+              })
+              rounds.appendChild(b)
+              watchUi.rows.push({ el: b, round: r, name: pl.name })
+            })
+            box.appendChild(rounds)
+          }
+          list.appendChild(box)
+        })
+        markWatch()
+      }
+
+      function markWatch() {
+        var cur = viewer && viewer.currentWatch()
+        $('watch-stop').hidden = !cur
+        document.querySelectorAll('#watch .watch-player').forEach(function (box, i) {
+          var pl = watchUi.info && watchUi.info.presence[i]
+          box.classList.toggle('current', !!pl && pl.name === cur)
+        })
+        if (!cur || !watchUi.info) return
+        var t = viewer.getCurrentTime()
+        var current = null
+        watchUi.info.rounds.forEach(function (r) {
+          if (r.startTime <= t + 0.01) current = r
+        })
+        watchUi.rows.forEach(function (row) {
+          row.el.classList.toggle('current', row.name === cur && row.round === current)
+        })
       }
 
       // ---- "Kto mnie zabił": deaths of the recorder, replayed through the killer's eyes ----
@@ -904,13 +1085,19 @@
 
       function showSidebarView(name) {
         var d = name === 'deaths'
-        $('view-rounds').classList.toggle('active', !d)
+        var w = name === 'watch'
+        var r = !d && !w
+        $('view-rounds').classList.toggle('active', r)
         $('view-deaths').classList.toggle('active', d)
-        $('rounds-head').hidden = d
-        $('rounds').hidden = d
+        $('view-watch').classList.toggle('active', w)
+        $('rounds-head').hidden = !r
+        $('rounds').hidden = !r
         $('deaths-head').hidden = !d
         $('deaths').hidden = !d
+        $('watch-head').hidden = !w
+        $('watch').hidden = !w
         if (d) markCurrentDeath()
+        if (w) markWatch()
       }
 
       // a death with someone to follow (not the world, a fall or a suicide)
